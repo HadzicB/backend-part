@@ -1,0 +1,23 @@
+{
+  "name": "backend-part",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "db:start": "LC_ALL=en_US.UTF-8 pg_ctl -D ../db/db/pgdata -l ../db/logfile start",
+    "dev": "(pg_isready -q || pnpm db:start) && node --watch server.js",
+    "db:stop": "pg_ctl -D ../db/db/pgdata stop"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.10.1",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@12.10.1",
+  "type": "module"
+}
