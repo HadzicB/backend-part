@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { pool } from "../../db.js";
 
 const scryptAsync = promisify(scrypt);
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Store "salt:hash". The random salt makes equal passwords hash differently.
 async function hashPassword(password) {
@@ -100,8 +101,23 @@ export async function login(req, res) {
   if (!valid) {
     return sendJson(res, 401, { message: "Wrong email or password" });
   }
+  // 32 random bytes = 64 hex chars. Unguessable, so it works as the "key".
+  const sessionId = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+
+  try {
+    await pool.query(
+      "INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)",
+      [sessionId, user.id, expiresAt],
+    );
+  } catch (error) {
+    console.log(error);
+    return sendJson(res, 500, { message: "Something went wrong" });
+  }
+
   sendJson(res, 200, {
     message: "Logged in",
     user: { id: user.id, username: user.username },
+    session: { id: sessionId, expiresAt },
   });
 }
