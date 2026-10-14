@@ -2,7 +2,12 @@
 
 Learning project: Next.js fullstack app. Developed ad hoc, no fixed roadmap.
 Backend is undecided: it may be Next.js route handlers/server actions, or a separate BE app. Don't assume either; ask before adding backend-specific code.
-Current state: login boilerplate only. `services/auth/authService.ts` is a stub with a TODO for the real backend call.
+Current state: signup and login work end to end, called by the frontend over `fetch`.
+- `server.js` (raw `http`, port 8080) routes `POST /login` and `POST /signup`; any other request returns the users list as JSON.
+- `modules/auth/auth.service.js`: `signup` validates on the server (400 field errors), hashes with scrypt (`salt:hash`), inserts the user (409 on duplicate email via `23505`). `login` verifies the password in constant time, creates a random 64-hex session ID (7 days) in `sessions`, and returns `{ user, session: { id, expiresAt } }` (401 on wrong credentials).
+- `db.js`: Pool plus `initDb()` creating the `practice` DB, `users` and `sessions` (`user_id` FK, `ON DELETE CASCADE`) if missing.
+- `modules/users/users.service.js` exists but is empty.
+- Not built yet: endpoint to read the session (who am I), logout, session expiry cleanup, route protection on the BE.
 
 # How to work with me
 

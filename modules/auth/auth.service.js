@@ -36,7 +36,7 @@ function sendJson(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
-export async function signup(req, res) {
+async function signup(req, res) {
   let raw = "";
   for await (const chunk of req) raw += chunk;
   const body = JSON.parse(raw);
@@ -74,7 +74,7 @@ export async function signup(req, res) {
   }
 }
 
-export async function login(req, res) {
+async function login(req, res) {
   let raw = "";
   for await (const chunk of req) raw += chunk;
   const body = JSON.parse(raw);
@@ -121,3 +121,26 @@ export async function login(req, res) {
     session: { id: sessionId, expiresAt },
   });
 }
+
+async function logout(req, response) {
+  // Frontend part sends it as "Authorization: Bearer <id>".
+  const sessionId = (req.headers.authorization ?? "").replace("Bearer ", "");
+
+  try {
+    // Deleting the row is the real logout. Safe to repeat: no row is fine too.
+    if (sessionId) {
+      await pool.query("DELETE FROM sessions WHERE id = $1", [sessionId]);
+    }
+  } catch (error) {
+    console.log(error);
+    return sendJson(response, 500, { message: "Something went wrong" });
+  }
+
+  sendJson(response, 200, { message: "Logged out" });
+}
+
+export const authService = {
+  signup,
+  login,
+  logout,
+};
