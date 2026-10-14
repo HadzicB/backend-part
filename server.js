@@ -12,6 +12,8 @@ http
       return authService.signup(req, res);
     if (req.method === "POST" && req.url === "/logout")
       return authService.logout(req, res);
+    if (req.method === "GET" && req.url === "/me")
+      return authService.me(req, res);
 
     const { rows } = await pool.query(
       "SELECT id, username, login_count FROM users",

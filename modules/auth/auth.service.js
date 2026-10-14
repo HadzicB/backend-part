@@ -141,8 +141,37 @@ async function logout(req, response) {
   sendJson(response, 200, { message: "Logged out" });
 }
 
+// Returns the user for a valid, non-expired session, otherwise undefined.
+// Shared helper: /me uses it now, protected endpoints will use it later.
+async function getUserBySession(sessionId) {
+  if (!sessionId) return undefined;
+  const { rows } = await pool.query(
+    `SELECT u.id, u.username
+     FROM sessions s
+     JOIN users u ON u.id = s.user_id
+     WHERE s.id = $1 AND s.expires_at > now()`,
+    [sessionId],
+  );
+  return rows[0];
+}
+
+async function me(req, res) {
+  const sessionId = (req.headers.authorization ?? "").replace("Bearer ", "");
+
+  try {
+    const user = await getUserBySession(sessionId);
+    if (!user) return sendJson(res, 401, { message: "Not logged in" });
+    sendJson(res, 200, { user });
+  } catch (error) {
+    console.log(error);
+    sendJson(res, 500, { message: "Something went wrong" });
+  }
+}
+
 export const authService = {
   signup,
   login,
   logout,
+  me,
+  getUserBySession,
 };

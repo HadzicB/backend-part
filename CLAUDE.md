@@ -3,11 +3,25 @@
 Learning project: Next.js fullstack app. Developed ad hoc, no fixed roadmap.
 Backend is undecided: it may be Next.js route handlers/server actions, or a separate BE app. Don't assume either; ask before adding backend-specific code.
 Current state: signup and login work end to end, called by the frontend over `fetch`.
-- `server.js` (raw `http`, port 8080) routes `POST /login` and `POST /signup`; any other request returns the users list as JSON.
+- `server.js` (raw `http`, port 8080) routes `POST /login`, `POST /signup`, `POST /logout` and `GET /me`; any other request returns the users list as JSON.
 - `modules/auth/auth.service.js`: `signup` validates on the server (400 field errors), hashes with scrypt (`salt:hash`), inserts the user (409 on duplicate email via `23505`). `login` verifies the password in constant time, creates a random 64-hex session ID (7 days) in `sessions`, and returns `{ user, session: { id, expiresAt } }` (401 on wrong credentials).
 - `db.js`: Pool plus `initDb()` creating the `practice` DB, `users` and `sessions` (`user_id` FK, `ON DELETE CASCADE`) if missing.
-- `modules/users/users.service.js` exists but is empty.
-- Not built yet: endpoint to read the session (who am I), logout, session expiry cleanup, route protection on the BE.
+- `logout` deletes the session row (`Authorization: Bearer <id>`). `getUserBySession(sessionId)` joins `sessions` and `users` and returns the user only if `expires_at > now()`; `GET /me` wraps it (200 with the user, 401 otherwise).
+- `modules/users/users.service.js`: `incrementLoginCount(userId)` does `login_count = login_count + 1` in SQL (no read-modify-write race); `login` calls it after the session insert (not tested by me yet at the time of writing).
+- Not built yet: auth guard for protected endpoints, expired-session cleanup, JSON parse / DB error handling in every handler (a malformed body can crash the process), transactions for login (session insert + counter).
+
+## Next steps (in order)
+
+1. Auth guard: one central check before routing (default deny, small public list: `/login`, `/signup`) that calls `getUserBySession` and puts the user on `req`, so 90 endpoints don't each repeat the check. In Express later this becomes middleware.
+2. Wrap handlers in a central try/catch so bad input or DB errors return 4xx/5xx instead of crashing.
+3. Cleanup of expired sessions.
+4. Later: roles/permissions (`role` column, `requireRole`), forgot password (reset token with expiry), migrations instead of `CREATE TABLE IF NOT EXISTS`.
+
+## Still unclear to me (re-explain simply when I ask, in Serbian if I write Serbian)
+
+- Who checks that a session is active in `sessions`, and on which call: every protected BE endpoint checks it itself on every request that reaches it (cheap primary-key lookup); the FE does not ask `/me` before each action.
+- `/me` is a feature (returns the user), not the authorization itself; `getUserBySession` is the shared check.
+- Why the FE never talks to the DB: only the BE has the DB connection.
 
 # How to work with me
 
