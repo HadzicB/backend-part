@@ -1,6 +1,7 @@
 import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { pool } from "../../db.js";
+import { usersService } from "../users/users.service.js";
 
 const scryptAsync = promisify(scrypt);
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -110,6 +111,7 @@ async function login(req, res) {
       "INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)",
       [sessionId, user.id, expiresAt],
     );
+    await usersService.incrementLoginCount(user.id);
   } catch (error) {
     console.log(error);
     return sendJson(res, 500, { message: "Something went wrong" });
