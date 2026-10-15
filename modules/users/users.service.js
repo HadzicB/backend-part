@@ -1,36 +1,28 @@
-import { pool } from "../../db.js";
-import { sendJson } from "../../helpers/sendJson.js";
+import { usersRepository } from "./users.repository.js";
 
-// The database does the +1 itself. Reading the number into JS, adding 1 and
-// writing it back would lose counts when two logins happen at the same time.
+// Service = business logic, no req/res and no SQL.
 async function incrementLoginCount(userId) {
-  await pool.query(
-    "UPDATE users SET login_count = login_count + 1 WHERE id = $1",
-    [userId],
-  );
+  await usersRepository.incrementLoginCount(userId);
 }
 
-async function getCurrentUser(req, res) {
-  const sessionId = (req.headers.authorization ?? "").replace("Bearer ", "");
+// Rule: no session ID means no user, so we don't even query the database.
+async function getUserBySession(sessionId) {
+  if (!sessionId) return null;
+  return usersRepository.findBySessionId(sessionId);
+}
 
-  try {
-    const { rows } = await pool.query(
-      `SELECT u.id, u.username
-       FROM sessions s
-       JOIN users u ON u.id = s.user_id
-       WHERE s.id = $1 AND s.expires_at > now()`,
-      [sessionId],
-    );
-    const user = rows[0];
-    if (!user) return sendJson(res, 401, { message: "Not logged in" });
-    sendJson(res, 200, { user });
-  } catch (error) {
-    console.log(error);
-    sendJson(res, 500, { message: "Something went wrong" });
-  }
+// null = the username is already taken
+async function createUser(username, passwordHash) {
+  return usersRepository.createUser(username, passwordHash);
+}
+
+async function findUserByUsername(username) {
+  return usersRepository.findByUsername(username);
 }
 
 export const usersService = {
   incrementLoginCount,
-  getCurrentUser,
+  getUserBySession,
+  createUser,
+  findUserByUsername,
 };

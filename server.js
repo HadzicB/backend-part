@@ -1,28 +1,35 @@
 import http from "node:http";
 import { initDb } from "./db.js";
+import { authController } from "./modules/auth/auth.controller.js";
 import { authService } from "./modules/auth/auth.service.js";
-import { usersService } from "./modules/users/users.service.js";
+import { usersController } from "./modules/users/users.controller.js";
 
 await initDb();
 
+// Path without the query string: "/login?x=1" is still "/login"
+function getPath(req) {
+  return new URL(req.url, "http://localhost").pathname;
+}
+
 function registeredRoutes(req, res) {
-  if (req.method === "POST" && req.url === "/login")
-    return authService.login(req, res);
-  if (req.method === "POST" && req.url === "/signup")
-    return authService.signup(req, res);
-  if (req.method === "POST" && req.url === "/logout")
-    return authService.logout(req, res);
-  if (req.method === "GET" && req.url === "/me")
-    return usersService.getCurrentUser(req, res);
+  const path = getPath(req);
+  if (req.method === "POST" && path === "/login")
+    return authController.login(req, res);
+  if (req.method === "POST" && path === "/signup")
+    return authController.signup(req, res);
+  if (req.method === "POST" && path === "/logout")
+    return authController.logout(req, res);
+  if (req.method === "GET" && path === "/me")
+    return usersController.getCurrentUser(req, res);
 
   res.writeHead(404, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ error: "Not found" }));
+  res.end(JSON.stringify({ message: "Not found" }));
 }
 
 const PUBLIC_ROUTES = ["POST /login", "POST /signup"];
 
 async function userAuthorized(req, res, next) {
-  if (PUBLIC_ROUTES.includes(`${req.method} ${req.url}`)) return next();
+  if (PUBLIC_ROUTES.includes(`${req.method} ${getPath(req)}`)) return next();
   const sessionId = req.headers.authorization?.replace("Bearer ", "");
 
   const isAuthorized = await authService.isSessionActive(sessionId);
