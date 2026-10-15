@@ -28,6 +28,7 @@ Current state: signup and login work end to end, called by the frontend over `fe
 - Who checks that a session is active in `sessions`, and on which call: every protected BE endpoint checks it itself on every request that reaches it (cheap primary-key lookup); the FE does not ask `/me` before each action.
 - `/me` (`usersController.getCurrentUser`) is a feature (returns the user), not the authorization itself; the guard's session check (`authService.isSessionActive`) is the shared check.
 - Why the FE never talks to the DB: only the BE has the DB connection.
+- Error flow across the whole chain: who returns and who throws errors, from the BE server to the Next server and then to the browser, and what each of them does with an error (what the BE sends, what the Next server turns it into, what the browser finally sees). I don't know this yet and will learn it by building (e.g. `error.tsx`, one 401 handler, the Express error middleware). Re-explain with a simple end-to-end example when I ask.
 
 # How to work with me
 
@@ -65,7 +66,7 @@ Update this section as decisions get made (e.g. "BE is now a separate app at ../
 - Database: SQL with an ORM. I know schemas, keys and joins but need a refresher, so show the generated SQL and explain relational concepts. Proposed, not yet confirmed: Drizzle + PostgreSQL. Hosting/Docker setup is undecided, don't assume it.
   - Update: PostgreSQL 16 is confirmed and running locally. Currently using raw `pg` (Pool), no ORM yet. Docker deferred.
 - Planned BE layering (when Express + ORM come in): route (URL + method to controller) > controller (HTTP only: read `req`, call the service, write `res`; this is the "handler") > service (business rules, e.g. `auth.service.js`) > data access (ORM queries, replaces hand-written SQL in services). Next.js is not a layer here, it is the client calling the routes. The auth guard becomes Express middleware, error handling becomes one error middleware.
-- Mini test before migrating to Express (I answer, Claude only checks): name 3 pieces of hand-written code in `server.js` that Express makes redundant.
+- Mini test before migrating to Express (I answer, Claude only checks): name 3 pieces of hand-written code in `server.js` that Express makes redundant. Result (2026-10-15): passed, with one correction. Named: `express()` replaces `run` as the function passed to `http.createServer` (it is a function, not an object; `app.listen` is the shortcut); routing replaces the `if (method && path)` chain, `getPath` and the 404 fallback; `app.use` middleware replaces `steps`/`next`/`run`; `res.status().json()` replaces `sendJson`. Correction: body reading + `JSON.parse` is not automatic, it is the opt-in `express.json()` middleware.
 - Next focus: authentication (login first, then sessions, route protection). Auth flow: backend verifies credentials and issues the token/session, Next.js keeps it in an httpOnly cookie.
 
 # Local database setup (current)
