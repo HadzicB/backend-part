@@ -1,26 +1,27 @@
 # Project context
 
 Learning project: Next.js fullstack app. Developed ad hoc, no fixed roadmap.
-Backend is undecided: it may be Next.js route handlers/server actions, or a separate BE app. Don't assume either; ask before adding backend-specific code.
+Backend is decided: a separate Node app (this one), the frontend (`../frontend-part`) calls it over `fetch` from the Next server (server components/actions), not from the browser. Ask before adding backend-specific code.
 Current state: signup and login work end to end, called by the frontend over `fetch`.
 - `server.js` (raw `http`, port 8080) routes `POST /login`, `POST /signup`, `POST /logout` and `GET /me`; any other request returns 404. A central guard (`userAuthorized`) runs before routing: default deny, public list `POST /login`, `POST /signup`, checks the session with `authService.isSessionActive`.
 - `modules/auth/auth.service.js`: `signup` validates on the server (400 field errors), hashes with scrypt (`salt:hash`), inserts the user (409 on duplicate email via `23505`). `login` verifies the password in constant time, creates a random 64-hex session ID (20 minutes) in `sessions`, and returns `{ user, session: { id, expiresAt } }` (401 on wrong credentials).
 - `db.js`: Pool plus `initDb()` creating the `practice` DB, `users` and `sessions` (`user_id` FK, `ON DELETE CASCADE`) if missing.
 - `logout` deletes the session row (`Authorization: Bearer <id>`). `usersService.getCurrentUser` (moved from `authService.me`, handler for `GET /me`) joins `sessions` and `users` and returns the user only if `expires_at > now()` (200 with the user, 401 otherwise). `sendJson` lives in `helpers/sendJson.js`. `getUserBySession` does not exist yet.
 - `modules/users/users.service.js`: `incrementLoginCount(userId)` does `login_count = login_count + 1` in SQL (no read-modify-write race); `login` calls it after the session insert (not tested by me yet at the time of writing).
-- Not built yet: auth guard for protected endpoints, expired-session cleanup, JSON parse / DB error handling in every handler (a malformed body can crash the process), transactions for login (session insert + counter).
+- Central error handling: `run()` in `server.js` catches anything thrown in a step and returns 500 `{ message: "Something went wrong" }`, so a malformed JSON body no longer crashes the process (but it returns 500, not 400).
+- Not built yet: `getUserBySession` and putting the user on `req` in the guard, expired-session cleanup, 400 for malformed JSON, transactions for login (session insert + counter), CORS/`OPTIONS` (not needed while only the Next server calls the BE), public-route match ignores query strings (`/login?x=1` gets 401).
 
 ## Next steps (in order)
 
-1. Auth guard: one central check before routing (default deny, small public list: `/login`, `/signup`) that calls `getUserBySession` and puts the user on `req`, so 90 endpoints don't each repeat the check. In Express later this becomes middleware.
-2. Wrap handlers in a central try/catch so bad input or DB errors return 4xx/5xx instead of crashing.
+1. (done, first version) Auth guard: central check before routing, default deny, public list `/login`, `/signup`. Remaining: replace `isSessionActive` with `getUserBySession` and put the user on `req`, so 90 endpoints don't each repeat the check. In Express later this becomes middleware.
+2. (done, first version) Central try/catch in `run()`. Remaining: return 400 for malformed JSON instead of 500.
 3. Cleanup of expired sessions.
 4. Later: roles/permissions (`role` column, `requireRole`), forgot password (reset token with expiry), migrations instead of `CREATE TABLE IF NOT EXISTS`.
 
 ## Still unclear to me (re-explain simply when I ask, in Serbian if I write Serbian)
 
 - Who checks that a session is active in `sessions`, and on which call: every protected BE endpoint checks it itself on every request that reaches it (cheap primary-key lookup); the FE does not ask `/me` before each action.
-- `/me` is a feature (returns the user), not the authorization itself; `getUserBySession` is the shared check.
+- `/me` (`usersService.getCurrentUser`) is a feature (returns the user), not the authorization itself; the guard's session check (`isSessionActive`, later `getUserBySession`) is the shared check.
 - Why the FE never talks to the DB: only the BE has the DB connection.
 
 # How to work with me
@@ -77,7 +78,7 @@ Update this section as decisions get made (e.g. "BE is now a separate app at ../
   - `db:stop`: `pg_ctl -D ../db/db/pgdata stop`
   - `dev`: starts Postgres if `pg_isready` fails, then `node --watch server.js`
 - Postgres keeps running after the terminal closes; stop it with `pnpm db:stop`.
-- BE: `db.js` (Pool, `initDb()` creating the DB and both tables if missing) and `server.js` (raw `http`, routes auth endpoints, other requests return users as JSON).
+- BE: `db.js` (Pool, `initDb()` creating the DB and both tables if missing) and `server.js` (raw `http`, routes auth endpoints behind the guard, other requests return 404).
 
 # Where I am (knowledge)
 
