@@ -1,10 +1,11 @@
 import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { pool } from "../../db.js";
+import { sendJson } from "../../helpers/sendJson.js";
 import { usersService } from "../users/users.service.js";
 
 const scryptAsync = promisify(scrypt);
-const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SESSION_DURATION_MS = 20 * 60 * 1000; // 20 minutes
 
 // Store "salt:hash". The random salt makes equal passwords hash differently.
 async function hashPassword(password) {
@@ -30,11 +31,6 @@ async function verifyPassword(password, stored) {
   const keyBuffer = Buffer.from(key, "hex");
   // timingSafeEqual compares in constant time (no timing leaks)
   return keyBuffer.length === hash.length && timingSafeEqual(keyBuffer, hash);
-}
-
-function sendJson(res, status, data) {
-  res.writeHead(status, { "Content-Type": "application/json" });
-  res.end(JSON.stringify(data));
 }
 
 async function signup(req, res) {
@@ -141,37 +137,18 @@ async function logout(req, response) {
   sendJson(response, 200, { message: "Logged out" });
 }
 
-// Returns the user for a valid, non-expired session, otherwise undefined.
-// Shared helper: /me uses it now, protected endpoints will use it later.
-async function getUserBySession(sessionId) {
-  if (!sessionId) return undefined;
-  const { rows } = await pool.query(
-    `SELECT u.id, u.username
-     FROM sessions s
-     JOIN users u ON u.id = s.user_id
-     WHERE s.id = $1 AND s.expires_at > now()`,
+async function isSessionActive(sessionId) {
+  if (!sessionId) return false;
+  const { rowCount } = await pool.query(
+    "SELECT 1 FROM sessions WHERE id = $1 AND expires_at > now()",
     [sessionId],
   );
-  return rows[0];
-}
-
-async function me(req, res) {
-  const sessionId = (req.headers.authorization ?? "").replace("Bearer ", "");
-
-  try {
-    const user = await getUserBySession(sessionId);
-    if (!user) return sendJson(res, 401, { message: "Not logged in" });
-    sendJson(res, 200, { user });
-  } catch (error) {
-    console.log(error);
-    sendJson(res, 500, { message: "Something went wrong" });
-  }
+  return rowCount > 0;
 }
 
 export const authService = {
   signup,
   login,
   logout,
-  me,
-  getUserBySession,
+  isSessionActive,
 };
