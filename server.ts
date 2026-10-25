@@ -1,3 +1,5 @@
+import express, { type Express } from "express";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import http from "node:http";
 import { initDb } from "./db.js";
 import { authController } from "./modules/auth/auth.controller.js";
@@ -6,12 +8,15 @@ import { usersController } from "./modules/users/users.controller.js";
 
 await initDb();
 
+const app: Express = express();
+const port = 8081;
+
 // Path without the query string: "/login?x=1" is still "/login"
-function getPath(req) {
-  return new URL(req.url, "http://localhost").pathname;
+function getPath(req: IncomingMessage) {
+  return new URL(req.url ?? "/", "http://localhost").pathname;
 }
 
-function registeredRoutes(req, res) {
+function registeredRoutes(req: IncomingMessage, res: ServerResponse) {
   const path = getPath(req);
   if (req.method === "POST" && path === "/login")
     return authController.login(req, res);
@@ -19,7 +24,7 @@ function registeredRoutes(req, res) {
     return authController.signup(req, res);
   if (req.method === "POST" && path === "/logout")
     return authController.logout(req, res);
-  if (req.method === "GET" && path === "/me")
+  if (req.method === "GET" && path === "/users/me")
     return usersController.getCurrentUser(req, res);
 
   res.writeHead(404, { "Content-Type": "application/json" });
@@ -28,7 +33,13 @@ function registeredRoutes(req, res) {
 
 const PUBLIC_ROUTES = ["POST /login", "POST /signup"];
 
-async function userAuthorized(req, res, next) {
+type Next = () => Promise<void>;
+
+async function userAuthorized(
+  req: IncomingMessage,
+  res: ServerResponse,
+  next: Next,
+) {
   if (PUBLIC_ROUTES.includes(`${req.method} ${getPath(req)}`)) return next();
   const sessionId = req.headers.authorization?.replace("Bearer ", "");
 
@@ -45,9 +56,9 @@ async function userAuthorized(req, res, next) {
 
 const steps = [userAuthorized, registeredRoutes];
 
-function run(req, res) {
+function run(req: IncomingMessage, res: ServerResponse) {
   let i = 0;
-  const next = async () => {
+  const next: Next = async () => {
     const step = steps[i++];
     if (step) await step(req, res, next);
   };
@@ -60,3 +71,7 @@ function run(req, res) {
   });
 }
 http.createServer(run).listen(8080, () => console.log("http://localhost:8080"));
+
+app.listen(port, () => {
+  console.log(`Example app listening on port ${port}`);
+});

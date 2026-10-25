@@ -1,8 +1,9 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { sendJson } from "../../helpers/sendJson.js";
 import { usersService } from "./users.service.js";
 
 // Controller = HTTP only: read the request, call the service, write the response.
-async function getCurrentUser(req, res) {
+async function getCurrentUser(req: IncomingMessage, res: ServerResponse) {
   const sessionId = (req.headers.authorization ?? "").replace("Bearer ", "");
 
   try {

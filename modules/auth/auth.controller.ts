@@ -1,12 +1,13 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { sendJson } from "../../helpers/sendJson.js";
 import { authService } from "./auth.service.js";
 
 // Controller = HTTP only: read the request, call the service, write the response.
 
-async function signup(req, res) {
+async function signup(req: IncomingMessage, res: ServerResponse) {
   let raw = "";
   for await (const chunk of req) raw += chunk;
-  let body;
+  let body: Record<string, unknown>;
   try {
     body = JSON.parse(raw);
   } catch {
@@ -32,10 +33,10 @@ async function signup(req, res) {
   }
 }
 
-async function login(req, res) {
+async function login(req: IncomingMessage, res: ServerResponse) {
   let raw = "";
   for await (const chunk of req) raw += chunk;
-  let body;
+  let body: Record<string, unknown>;
   try {
     body = JSON.parse(raw);
   } catch {
@@ -67,7 +68,7 @@ async function login(req, res) {
   }
 }
 
-async function logout(req, res) {
+async function logout(req: IncomingMessage, res: ServerResponse) {
   // Frontend part sends it as "Authorization: Bearer <id>".
   const sessionId = (req.headers.authorization ?? "").replace("Bearer ", "");
 

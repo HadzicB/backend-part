@@ -1,10 +1,15 @@
 import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
-const scryptAsync = promisify(scrypt);
+// promisify can't infer scrypt's overloads, so we state the shape ourselves
+const scryptAsync = promisify(scrypt) as (
+  password: string,
+  salt: string,
+  keylen: number,
+) => Promise<Buffer>;
 
 // Store "salt:hash". The random salt makes equal passwords hash differently.
-export async function hashPassword(password) {
+export async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const hash = await scryptAsync(password, salt, 64);
   return `${salt}:${hash.toString("hex")}`;
@@ -20,7 +25,7 @@ export async function hashPassword(password) {
 //   return argon2.hash(password);
 // }
 
-export async function verifyPassword(password, stored) {
+export async function verifyPassword(password: string, stored: string) {
   const [salt, key] = stored.split(":");
   if (!salt || !key) return false;
   const hash = await scryptAsync(password, salt, 64);

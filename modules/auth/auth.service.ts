@@ -6,8 +6,8 @@ import { hashPassword, verifyPassword } from "./auth.helpers.js";
 const SESSION_DURATION_MS = 20 * 60 * 1000; // 20 minutes
 
 // Never trust the client's validation, check again on the server
-function validateSignup(email, password) {
-  const errors = {};
+function validateSignup(email: string, password: string) {
+  const errors: Record<string, string[]> = {};
   if (!email) errors.email = ["This field is required"];
   else if (!email.includes("@")) errors.email = ["Enter a valid email"];
   if (!password) errors.password = ["This field is required"];
@@ -18,7 +18,7 @@ function validateSignup(email, password) {
 
 // Service = business rules, no req/res and no SQL. It never picks HTTP
 // statuses: it returns a result and the controller maps it to a status.
-async function signup(rawEmail, rawPassword) {
+async function signup(rawEmail: unknown, rawPassword: unknown) {
   const email = String(rawEmail ?? "").trim();
   const password = String(rawPassword ?? "");
 
@@ -38,7 +38,7 @@ async function signup(rawEmail, rawPassword) {
 }
 
 // Returns { user, session }, or null for wrong credentials.
-async function login(rawEmail, rawPassword) {
+async function login(rawEmail: unknown, rawPassword: unknown) {
   const user = await usersService.findUserByUsername(
     String(rawEmail ?? "").trim(),
   );
@@ -60,12 +60,12 @@ async function login(rawEmail, rawPassword) {
 }
 
 // Deleting the row is the real logout. Safe to repeat: no row is fine too.
-async function logout(sessionId) {
+async function logout(sessionId: string) {
   if (!sessionId) return;
   await authRepository.deleteSession(sessionId);
 }
 
-async function isSessionActive(sessionId) {
+async function isSessionActive(sessionId: string | undefined) {
   if (!sessionId) return false;
   return (await authRepository.findActiveSession(sessionId)) !== null;
 }
