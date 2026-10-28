@@ -1,4 +1,5 @@
 import { pool } from "../../db.js";
+import type { User, UserWithPassword } from "./users.types.js";
 
 // Repository = data access only: SQL in, rows out. No business rules, no req/res.
 
@@ -11,8 +12,8 @@ async function incrementLoginCount(userId: number) {
   );
 }
 
-async function findBySessionId(sessionId: string) {
-  const { rows } = await pool.query(
+async function findBySessionId(sessionId: string): Promise<User | null> {
+  const { rows } = await pool.query<User>(
     `SELECT u.id, u.username
      FROM sessions s
      JOIN users u ON u.id = s.user_id
@@ -23,21 +24,26 @@ async function findBySessionId(sessionId: string) {
 }
 
 // Returns the new user, or null if the username is taken (23505 = unique_violation).
-async function createUser(username: string, passwordHash: string) {
+async function createUser(
+  username: string,
+  passwordHash: string,
+): Promise<User | null> {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await pool.query<User>(
       "INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username",
       [username, passwordHash],
     );
-    return rows[0];
+    return rows[0] ?? null;
   } catch (error) {
     if ((error as { code?: string }).code === "23505") return null;
     throw error;
   }
 }
 
-async function findByUsername(username: string) {
-  const { rows } = await pool.query(
+async function findByUsername(
+  username: string,
+): Promise<UserWithPassword | null> {
+  const { rows } = await pool.query<UserWithPassword>(
     "SELECT id, username, password_hash FROM users WHERE username = $1",
     [username],
   );

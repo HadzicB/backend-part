@@ -1,6 +1,9 @@
-import express, { type Express } from "express";
-import type { IncomingMessage, ServerResponse } from "node:http";
-import http from "node:http";
+import express, {
+  type ErrorRequestHandler,
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 import { initDb } from "./db.js";
 import { authController } from "./modules/auth/auth.controller.js";
 import { authService } from "./modules/auth/auth.service.js";
@@ -8,70 +11,52 @@ import { usersController } from "./modules/users/users.controller.js";
 
 await initDb();
 
-const app: Express = express();
-const port = 8081;
-
-// Path without the query string: "/login?x=1" is still "/login"
-function getPath(req: IncomingMessage) {
-  return new URL(req.url ?? "/", "http://localhost").pathname;
-}
-
-function registeredRoutes(req: IncomingMessage, res: ServerResponse) {
-  const path = getPath(req);
-  if (req.method === "POST" && path === "/login")
-    return authController.login(req, res);
-  if (req.method === "POST" && path === "/signup")
-    return authController.signup(req, res);
-  if (req.method === "POST" && path === "/logout")
-    return authController.logout(req, res);
-  if (req.method === "GET" && path === "/users/me")
-    return usersController.getCurrentUser(req, res);
-
-  res.writeHead(404, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ message: "Not found" }));
-}
+const app = express();
+const port = 8080;
 
 const PUBLIC_ROUTES = ["POST /login", "POST /signup"];
 
-type Next = () => Promise<void>;
-
-async function userAuthorized(
-  req: IncomingMessage,
-  res: ServerResponse,
-  next: Next,
-) {
-  if (PUBLIC_ROUTES.includes(`${req.method} ${getPath(req)}`)) return next();
+// Guard: default deny. req.path is the path without the query string.
+async function userAuthorized(req: Request, res: Response, next: NextFunction) {
+  if (PUBLIC_ROUTES.includes(`${req.method} ${req.path}`)) return next();
   const sessionId = req.headers.authorization?.replace("Bearer ", "");
 
   const isAuthorized = await authService.isSessionActive(sessionId);
 
   if (!isAuthorized) {
-    res.writeHead(401, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ message: "Not authenticated" }));
-    return res;
-  } else {
-    return next();
+    return res.status(401).json({ message: "Not authenticated" });
   }
+  next();
 }
 
-const steps = [userAuthorized, registeredRoutes];
+// Reads the JSON body into req.body. Malformed JSON (and strict mode rejects
+// "null" and "5") is passed to the error middleware below.
+app.use(express.json());
+app.use(userAuthorized);
 
-function run(req: IncomingMessage, res: ServerResponse) {
-  let i = 0;
-  const next: Next = async () => {
-    const step = steps[i++];
-    if (step) await step(req, res, next);
-  };
-  next().catch((error) => {
-    console.log(error);
-    if (!res.headersSent) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ message: "Something went wrong" }));
-    }
-  });
-}
-http.createServer(run).listen(8080, () => console.log("http://localhost:8080"));
+app.post("/login", authController.login);
+app.post("/signup", authController.signup);
+app.post("/logout", authController.logout);
+app.get("/users/me", usersController.getCurrentUser);
+
+// Reached only when no route above matched
+app.use((_req, res) => {
+  res.status(404).json({ message: "Not found" });
+});
+
+// Error middleware (4 arguments). Express 5 also sends rejected promises from
+// async handlers and middleware here.
+const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
+  if (error?.type === "entity.parse.failed") {
+    return res.status(400).json({ message: "Invalid JSON" });
+  }
+  console.log(error);
+  if (!res.headersSent) {
+    res.status(500).json({ message: "Something went wrong" });
+  }
+};
+app.use(errorHandler);
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+  console.log(`http://localhost:${port}`);
 });

@@ -3,7 +3,7 @@ import pg from "pg";
 const { Client, Pool } = pg;
 
 const config = { host: "localhost", port: 5432, user: "boha1704" };
-const DB_NAME = "practice";
+const DB_NAME = "jobfinder";
 
 // 1. Create the database if it doesn't exist
 async function ensureDatabase() {

@@ -2,12 +2,13 @@ import { randomBytes } from "node:crypto";
 import { usersService } from "../users/users.service.js";
 import { authRepository } from "./auth.repository.js";
 import { hashPassword, verifyPassword } from "./auth.helpers.js";
+import type { FieldErrors, LoginResult, SignupResult } from "./auth.types.js";
 
 const SESSION_DURATION_MS = 20 * 60 * 1000; // 20 minutes
 
 // Never trust the client's validation, check again on the server
 function validateSignup(email: string, password: string) {
-  const errors: Record<string, string[]> = {};
+  const errors: FieldErrors = {};
   if (!email) errors.email = ["This field is required"];
   else if (!email.includes("@")) errors.email = ["Enter a valid email"];
   if (!password) errors.password = ["This field is required"];
@@ -18,7 +19,10 @@ function validateSignup(email: string, password: string) {
 
 // Service = business rules, no req/res and no SQL. It never picks HTTP
 // statuses: it returns a result and the controller maps it to a status.
-async function signup(rawEmail: unknown, rawPassword: unknown) {
+async function signup(
+  rawEmail: unknown,
+  rawPassword: unknown,
+): Promise<SignupResult> {
   const email = String(rawEmail ?? "").trim();
   const password = String(rawPassword ?? "");
 
@@ -38,7 +42,10 @@ async function signup(rawEmail: unknown, rawPassword: unknown) {
 }
 
 // Returns { user, session }, or null for wrong credentials.
-async function login(rawEmail: unknown, rawPassword: unknown) {
+async function login(
+  rawEmail: unknown,
+  rawPassword: unknown,
+): Promise<LoginResult | null> {
   const user = await usersService.findUserByUsername(
     String(rawEmail ?? "").trim(),
   );

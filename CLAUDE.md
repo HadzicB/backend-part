@@ -1,8 +1,9 @@
 # Project context
 
-Learning project: Next.js fullstack app. Developed ad hoc, no fixed roadmap.
+Learning project: Next.js fullstack app, a **job application tracker with AI features** (see "The app" below). Developed ad hoc; auth comes first, app features after.
 Backend is decided: a separate Node app (this one), the frontend (`../frontend-part`) calls it over `fetch` from the Next server (server components/actions), not from the browser. Ask before adding backend-specific code.
 Current state: signup and login work end to end, called by the frontend over `fetch`.
+
 - `server.js` (raw `http`, port 8080) routes `POST /login`, `POST /signup`, `POST /logout` and `GET /me`; any other request returns 404. A central guard (`userAuthorized`) runs before routing: default deny, public list `POST /login`, `POST /signup`, checks the session with `authService.isSessionActive`.
 - Each module is split in three layers (no ORM yet, the repository holds raw SQL; Drizzle will replace what is inside it):
   - `*.controller.js`: HTTP only (read `req`, parse the JSON body inline, call the service, map the result to a status, write `res`). Keeps the debug `console.log`s and the try/catch that returns 500.
@@ -16,12 +17,41 @@ Current state: signup and login work end to end, called by the frontend over `fe
 - Decided: the guard stays a yes/no check (`isSessionActive`); no user on `req` until a real use case needs it (e.g. addresses owned by the logged-in user).
 - Not built yet: expired-session cleanup, transactions for login (a failed counter update after the session insert leaves an orphan session row), CORS/`OPTIONS` (not needed while only the Next server calls the BE), 405 for a known path with the wrong method.
 
+# The app: job application tracker (BE view)
+
+Goal is learning and an interview story, not beating LinkedIn. Imperfect AI results are fine if I can explain why and how to improve them (prompting, chunking, evals).
+
+Pitch: "A full-stack job application tracker: Node backend, Postgres, session auth. Users track applications across all sources, and AI parses job ads and matches them against their CV."
+
+Core flow (the BE owns all of it; Next only calls these endpoints):
+
+1. Log in (done).
+2. Upload CV once, stored per user.
+3. Paste a job ad: the BE calls the LLM and parses it into a structured job card (company, role, skills, salary) via structured output / tool calling. This is the heart of the app.
+4. AI match: score + gaps + what to emphasize, CV vs job ad.
+5. Track the card through stages: Saved → Applied → Interview → Offer / Rejected, with notes and follow-up dates.
+
+What this means for the BE:
+
+- New tables (not designed yet): job cards / applications and CVs, each with a `user_id` FK to `users` (1:N, like `sessions`).
+- Ownership: every query on these tables must be scoped to the logged-in user (`WHERE user_id = $1`), so user A can never read or change user B's data. This is the real use case that ends the "no user on `req`" decision above; revisit it when the first job endpoint is built.
+- LLM calls happen only in the BE (API key stays here, never in Next or the browser). Provider not decided yet (I've used the Anthropic API before). Needs error handling, retries and timeouts, because LLM calls are slow and can fail.
+
+Later features (rough order):
+
+- Daily automation: a scheduled job (node-cron or BullMQ repeatable job) every 24h fetches jobs from public sources, filters cheaply by keywords first, sends only the rest to the LLM for scoring, dedupes already-seen jobs, saves top matches in a "Suggested" stage. Optional email digest.
+- Job sources: public job APIs (e.g. Adzuna, Arbeitnow), public Greenhouse/Lever board JSON, RSS feeds. NOT LinkedIn scraping (against their terms, gets blocked).
+- RAG over saved ads and notes ("which jobs asked for Python?"), probably pgvector in the same Postgres.
+
+Backend talking points this should show in interviews: REST API design, Postgres schema and relations, session auth, validation, ownership checks, LLM calls server-side, retries for LLM failures, background jobs/queues for slow AI calls, rate limiting, dedupe, LLM cost control.
+
 ## Next steps (in order)
 
 1. (done) Auth guard: central check before routing, default deny, public list `/login`, `/signup`. In Express later this becomes middleware. Putting the user on `req` is deferred until there is a use case.
 2. (done) Central try/catch in `run()` and 400 for malformed JSON.
 3. Cleanup of expired sessions.
 4. Later: roles/permissions (`role` column, `requireRole`), forgot password (reset token with expiry), migrations instead of `CREATE TABLE IF NOT EXISTS`.
+5. Start the app itself: job cards table + CRUD endpoints scoped per user (manual add/edit/stage change), before any AI. Then CV upload, then AI job-ad parsing (core flow step 3).
 
 ## Still unclear to me (re-explain simply when I ask, in Serbian if I write Serbian)
 
@@ -61,10 +91,14 @@ my-app/
 Update this section as decisions get made (e.g. "BE is now a separate app at ../backend-part").
 
 - Goal: become confident enough to apply for full stack positions. Favor industry-standard patterns and explain how they come up in interviews.
+- App: job application tracker with AI (job-ad parsing, CV match, later daily job suggestions and RAG). Learning/portfolio project, not a LinkedIn competitor.
+- AI: LLM calls happen only in this BE, never in Next or the browser. Provider not decided yet.
+- Architecture: Next.js is a BFF (Backend-for-Frontend) in front of this BE: browser → Next server → BE. This BE owns business logic and data; Next renders pages and attaches the session server-side.
 - Backend: separate Node + Express app (TypeScript), sibling folder `../backend-part`. `services/` in this app becomes `fetch` calls to its API.
   - Update: for now the BE is plain JavaScript (ESM), using Node's built-in `http` module and the `pg` driver directly. No Express or TypeScript yet; both may come later.
 - Database: SQL with an ORM. I know schemas, keys and joins but need a refresher, so show the generated SQL and explain relational concepts. Proposed, not yet confirmed: Drizzle + PostgreSQL. Hosting/Docker setup is undecided, don't assume it.
   - Update: PostgreSQL 16 is confirmed and running locally. Currently using raw `pg` (Pool), no ORM yet. Docker deferred.
+  - Note: Drizzle still the leading ORM candidate (SQL-like, lean, supports pgvector for later RAG). Prisma considered: relation-based, hides joins, less transparent.
 - Planned BE layering (when Express + ORM come in): route (URL + method to controller) > controller (HTTP only: read `req`, call the service, write `res`; this is the "handler") > service (business rules, e.g. `auth.service.js`) > data access (ORM queries, replaces hand-written SQL in services). Next.js is not a layer here, it is the client calling the routes. The auth guard becomes Express middleware, error handling becomes one error middleware.
 - Mini test before migrating to Express (I answer, Claude only checks): name 3 pieces of hand-written code in `server.js` that Express makes redundant. Result (2026-10-15): passed, with one correction. Named: `express()` replaces `run` as the function passed to `http.createServer` (it is a function, not an object; `app.listen` is the shortcut); routing replaces the `if (method && path)` chain, `getPath` and the 404 fallback; `app.use` middleware replaces `steps`/`next`/`run`; `res.status().json()` replaces `sendJson`. Correction: body reading + `JSON.parse` is not automatic, it is the opt-in `express.json()` middleware.
 - Next focus: authentication (login first, then sessions, route protection). Auth flow: backend verifies credentials and issues the token/session, Next.js keeps it in an httpOnly cookie.
